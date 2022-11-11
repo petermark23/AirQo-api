@@ -3,49 +3,72 @@ package airqo.services;
 import airqo.models.Frequency;
 import airqo.models.Insight;
 import com.google.cloud.bigquery.*;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.text.SimpleDateFormat;
-import java.util.ArrayList;
-import java.util.Date;
-import java.util.List;
-import java.util.UUID;
+import java.util.*;
 
+import static airqo.config.Constants.dateTimeFormat;
+
+@Slf4j
 @Service
 public class BigQueryApiImpl implements BigQueryApi {
 
-	@Value("${hourly-device-measurements-table}")
-	private String hourlyMeasurementsTable;
+	@Value("${hourly-data-table}")
+	private String hourlyDataTable;
 
-	@Value("${daily-device-measurements-table}")
-	private String dailyMeasurementsTable;
+	@Value("${daily-data-table}")
+	private String dailyDataTable;
+
+	@Value("${reference-monitor-data-table}")
+	private String referenceMonitorDataTable;
+
+	@Value("${forecast-data-table}")
+	private String forecastDataTable;
 
 	@Override
-	public List<Insight> getInsights(Date startDateTime, Date endDateTime, String siteId, Frequency frequency) {
+	public List<Insight> getInsights(Date startDateTime, Date endDateTime, String siteId) {
 		List<Insight> insights = new ArrayList<>();
-		final SimpleDateFormat simpleDateFormat = new SimpleDateFormat(frequency.dateTimeFormat());
-
-		String table;
-		switch (frequency) {
-			case DAILY:
-				table = dailyMeasurementsTable;
-				break;
-			case HOURLY:
-				table = hourlyMeasurementsTable;
-				break;
-			default:
-				table = "";
-		}
+		final SimpleDateFormat simpleDateFormat = new SimpleDateFormat(dateTimeFormat);
 
 		try {
 			BigQuery bigquery = BigQueryOptions.getDefaultInstance().getService();
-			String query = String.format("SELECT timestamp, site_id, pm10, pm2_5 " +
+			String hourlyDataQuery = String.format(
+				"SELECT '%s' as frequency, timestamp, site_id, pm10, pm2_5, false as forecast " +
 					"FROM `%s` " +
 					"WHERE site_id = '%s' and timestamp >= '%s' and timestamp <= '%s' " +
-					"and pm2_5 is not null and pm10 is not null",
-				table, siteId, simpleDateFormat.format(startDateTime),
+					"and pm2_5 is not null and pm10 is not null and timestamp is not null",
+				Frequency.HOURLY, hourlyDataTable, siteId, simpleDateFormat.format(startDateTime),
 				simpleDateFormat.format(endDateTime));
+
+			String dailyDataQuery = String.format(
+				"SELECT '%s' as frequency, timestamp, site_id, pm10, pm2_5, false as forecast " +
+					"FROM `%s` " +
+					"WHERE site_id = '%s' and timestamp >= '%s' and timestamp <= '%s' " +
+					"and pm2_5 is not null and pm10 is not null and timestamp is not null",
+				Frequency.DAILY, dailyDataTable, siteId, simpleDateFormat.format(startDateTime),
+				simpleDateFormat.format(endDateTime));
+
+			String referenceMonitorDataQuery = String.format(
+				"SELECT '%s' as frequency, timestamp, site_id, pm10, pm2_5, false as forecast " +
+					"FROM `%s` " +
+					"WHERE site_id = '%s' and timestamp >= '%s' and timestamp <= '%s' " +
+					"and pm2_5 is not null and timestamp is not null",
+				Frequency.HOURLY, referenceMonitorDataTable, siteId, simpleDateFormat.format(startDateTime),
+				simpleDateFormat.format(endDateTime));
+
+			String forecastDataQuery = String.format(
+				"SELECT '%s' as frequency, timestamp, site_id, pm10, pm2_5, true as forecast " +
+					"FROM `%s` " +
+					"WHERE site_id = '%s' and timestamp >= '%s' and timestamp <= '%s' " +
+					"and pm2_5 is not null and timestamp is not null",
+				Frequency.HOURLY, forecastDataTable, siteId, simpleDateFormat.format(new Date()),
+				simpleDateFormat.format(endDateTime));
+
+			String query = String.format(" %s UNION ALL %s UNION ALL %s UNION ALL %s",
+				hourlyDataQuery, dailyDataQuery, forecastDataQuery, referenceMonitorDataQuery);
 
 			QueryJobConfiguration queryConfig =
 				QueryJobConfiguration.newBuilder(query)
@@ -68,19 +91,19 @@ public class BigQueryApiImpl implements BigQueryApi {
 			for (FieldValueList row : result.iterateAll()) {
 
 				try {
-					Date time = new Date((long) Double.valueOf(row.get("timestamp").getStringValue()).intValue() * 1000);
 
 					Insight insight = new Insight();
 					insight.setPm2_5(row.get("pm2_5").getDoubleValue());
 					insight.setPm10(row.get("pm10").getDoubleValue());
-					insight.setTime(time);
-					insight.setEmpty(false);
-					insight.setFrequency(frequency);
-					insight.setForecast(false);
+					insight.setFrequency(Frequency.valueOf(row.get("frequency").getStringValue()));
 					insight.setSiteId(row.get("site_id").getStringValue());
+					insight.setForecast(row.get("forecast").getBooleanValue());
+					insight.setTime(new Date(Double.valueOf(row.get("timestamp").getLongValue()).intValue()));
+					insight.setEmpty(false);
 
 					insights.add(insight);
-				} catch (NumberFormatException ignored) {
+				} catch (NumberFormatException e) {
+					log.debug(e.toString());
 				}
 
 			}
@@ -88,6 +111,6 @@ public class BigQueryApiImpl implements BigQueryApi {
 			throw new RuntimeException(e);
 		}
 
-		return insights;
+		return new ArrayList<>(new HashSet<>(insights));
 	}
 }
