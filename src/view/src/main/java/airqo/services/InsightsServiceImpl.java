@@ -2,6 +2,7 @@ package airqo.services;
 
 import airqo.models.Frequency;
 import airqo.models.Insight;
+import airqo.models.InsightData;
 import io.sentry.spring.tracing.SentrySpan;
 import lombok.extern.slf4j.Slf4j;
 import org.joda.time.DateTime;
@@ -71,7 +72,7 @@ public class InsightsServiceImpl implements InsightsService {
 				insight.setTime(date);
 				insight.setFrequency(frequency);
 				insight.setForecast(false);
-				insight.setEmpty(true);
+				insight.setAvailable(true);
 				insight.setSiteId(siteId);
 
 				if (insights.size() <= 1) {
@@ -89,64 +90,85 @@ public class InsightsServiceImpl implements InsightsService {
 
 	}
 
-	private List<Insight> formatInsightsTime(List<Insight> insights, int utcOffSet, Frequency frequency) {
+	@Override
+	public List<Insight> formatInsightsTime(List<Insight> insights, int utcOffSet) {
 
-		final SimpleDateFormat simpleDateFormat = new SimpleDateFormat(frequency.dateTimeFormat());
+		final SimpleDateFormat hourlyDateFormat = new SimpleDateFormat(Frequency.HOURLY.dateTimeFormat());
+		final SimpleDateFormat dailyDateFormat = new SimpleDateFormat(Frequency.DAILY.dateTimeFormat());
 
 		return insights.stream().peek(insight -> {
 
-			DateTime dateTime = new DateTime(insight.getTime());
-			if (utcOffSet < 0) {
-				dateTime = dateTime.minusHours(utcOffSet);
-			} else {
-				dateTime = dateTime.plusHours(utcOffSet);
-			}
-
-			insight.setTime(dateTime.toDate());
-
-			String newDate = simpleDateFormat.format(insight.getTime());
 			try {
-				insight.setTime(simpleDateFormat.parse(newDate));
-			} catch (ParseException ignored) {
+				DateTime dateTime = new DateTime(insight.getTime());
+				if (utcOffSet < 0) {
+					dateTime = dateTime.minusHours(utcOffSet);
+				} else {
+					dateTime = dateTime.plusHours(utcOffSet);
+				}
+
+				insight.setTime(dateTime.toDate());
+
+				switch (insight.getFrequency()){
+					case DAILY:
+						insight.setTime(dailyDateFormat.parse(dailyDateFormat.format(insight.getTime())));
+						break;
+					case HOURLY:
+						insight.setTime(hourlyDateFormat.parse(hourlyDateFormat.format(insight.getTime())));
+						break;
+					default:
+						break;
+				}
+
+			} catch (Exception ignored) {
 			}
 		}).collect(Collectors.toList());
 	}
 
 	@Override
 	@SentrySpan
-	@Cacheable(value = "appInsightsCache", cacheNames = {"appInsightsCache"}, unless = "#result.size() <= 0")
-	public List<Insight> getInsights(Date startDateTime, Date endDateTime, String siteId, int utcOffSet) {
+	@Cacheable(value = "appInsightsCache", cacheNames = {"appInsightsCache"}, unless = "#result.isEmpty()")
+	public InsightData getInsights(Date startDateTime, Date endDateTime, String siteId) {
 
 		List<Insight> insights = this.bigQueryApi.getInsights(startDateTime, endDateTime, siteId);
 
-		// Daily insights
-		List<Insight> dailyInsights = insights.stream().filter(insight ->
-				(insight.getFrequency() == Frequency.DAILY && !insight.getForecast()))
-			.collect(Collectors.toList());
-
-		// Hourly insights
-		List<Insight> hourlyInsights = insights.stream().filter(insight ->
-				(insight.getFrequency() == Frequency.HOURLY && !insight.getForecast()))
-			.collect(Collectors.toList());
-
-		// Forecast insights
 		List<Insight> forecastInsights = insights.stream().filter(Insight::getForecast)
 			.collect(Collectors.toList());
+		forecastInsights = new ArrayList<>(new HashSet<>(forecastInsights));
+
+		List<Insight> historicalInsights = insights.stream().filter(insight -> !insight.getForecast())
+			.collect(Collectors.toList());
+		historicalInsights = new ArrayList<>(new HashSet<>(historicalInsights));
+
+		// Daily insights
+		List<Insight> historicalDailyInsights = historicalInsights.stream().filter(insight ->
+				insight.getFrequency() == Frequency.DAILY)
+			.collect(Collectors.toList());
+		fillMissingInsights(historicalDailyInsights, startDateTime, endDateTime, siteId, Frequency.DAILY);
+
+		// Hourly insights
+		List<Insight> historicalHourlyInsights = historicalInsights.stream().filter(insight ->
+				insight.getFrequency() == Frequency.HOURLY)
+			.collect(Collectors.toList());
+		fillMissingInsights(historicalHourlyInsights, startDateTime, endDateTime, siteId, Frequency.HOURLY);
+
+		// Forecast insights
 		forecastInsights.removeIf(insight -> insight.getTime().before(new Date()));
+		fillMissingInsights(forecastInsights, startDateTime, endDateTime, siteId, Frequency.HOURLY);
 
-		// Insights
-		hourlyInsights.addAll(forecastInsights);
-		hourlyInsights = formatInsightsTime(hourlyInsights, utcOffSet, Frequency.HOURLY);
-		dailyInsights = formatInsightsTime(dailyInsights, utcOffSet, Frequency.DAILY);
-
-		fillMissingInsights(hourlyInsights, startDateTime, endDateTime, siteId, Frequency.HOURLY);
-		fillMissingInsights(dailyInsights, startDateTime, endDateTime, siteId, Frequency.DAILY);
-
-		hourlyInsights.addAll(dailyInsights);
-
-		return new HashSet<>(hourlyInsights).stream().peek(insight -> {
+		forecastInsights = forecastInsights.stream().peek(insight -> {
 			insight.setPm10(Double.parseDouble(new DecimalFormat("#.##").format(insight.getPm10())));
 			insight.setPm2_5(Double.parseDouble(new DecimalFormat("#.##").format(insight.getPm2_5())));
 		}).sorted(Comparator.comparing(Insight::getTime)).collect(Collectors.toList());
+
+		// Insights
+		historicalHourlyInsights.addAll(historicalDailyInsights);
+
+		historicalHourlyInsights = historicalHourlyInsights.stream().peek(insight -> {
+			insight.setPm10(Double.parseDouble(new DecimalFormat("#.##").format(insight.getPm10())));
+			insight.setPm2_5(Double.parseDouble(new DecimalFormat("#.##").format(insight.getPm2_5())));
+		}).sorted(Comparator.comparing(Insight::getTime)).collect(Collectors.toList());
+
+
+		return new InsightData(forecastInsights ,historicalHourlyInsights);
 	}
 }

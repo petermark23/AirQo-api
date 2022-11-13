@@ -99,7 +99,7 @@ public class BigQueryApiImpl implements BigQueryApi {
 					insight.setSiteId(row.get("site_id").getStringValue());
 					insight.setForecast(row.get("forecast").getBooleanValue());
 					insight.setTime(new Date(Double.valueOf(row.get("timestamp").getLongValue()).intValue()));
-					insight.setEmpty(false);
+					insight.setAvailable(false);
 
 					insights.add(insight);
 				} catch (NumberFormatException e) {
@@ -111,6 +111,6 @@ public class BigQueryApiImpl implements BigQueryApi {
 			throw new RuntimeException(e);
 		}
 
-		return new ArrayList<>(new HashSet<>(insights));
+		return insights;
 	}
 }

@@ -2,6 +2,7 @@ package airqo;
 
 import airqo.models.Frequency;
 import airqo.models.Insight;
+import airqo.models.InsightData;
 import airqo.services.InsightsService;
 import lombok.extern.slf4j.Slf4j;
 import org.joda.time.DateTime;
@@ -71,7 +72,7 @@ public class MeasurementControllerTests {
 		insight.setSiteId(siteId);
 		insight.setPm2_5(50);
 		insight.setPm10(100);
-		insight.setEmpty(false);
+		insight.setAvailable(false);
 		insight.setForecast(true);
 		insight.setFrequency(Frequency.HOURLY);
 		insight.setTime(startDateTime);
@@ -79,7 +80,7 @@ public class MeasurementControllerTests {
 		insights.clear();
 		insights.add(insight);
 
-		when(insightsService.getInsights(startDateTime, endDateTime, siteId, 0)).thenReturn(insights);
+		when(insightsService.getInsights(startDateTime, endDateTime, siteId)).thenReturn(new InsightData(insights, insights));
 
 		ResultActions resultActions = this.mockMvc.perform(get("/measurements/app/insights")
 				.param("siteId", siteId)
@@ -94,7 +95,7 @@ public class MeasurementControllerTests {
 			.andExpect(jsonPath("$.data", hasSize(1)))
 			.andExpect(jsonPath("$.data[0].siteId", is("site-01")));
 
-		verify(this.insightsService, times(1)).getInsights(startDateTime, endDateTime, siteId, 0);
+		verify(this.insightsService, times(1)).getInsights(startDateTime, endDateTime, siteId);
 
 		MockHttpServletResponse response = resultActions.andReturn().getResponse();
 		Assertions.assertEquals(response.getStatus(), 200);
@@ -113,7 +114,7 @@ public class MeasurementControllerTests {
 		Insight insight = new Insight();
 		insight.setTime(startDateTime);
 		insight.setFrequency(Frequency.HOURLY);
-		insight.setEmpty(false);
+		insight.setAvailable(false);
 		insight.setForecast(false);
 		insight.setPm2_5(23.90332);
 		insight.setPm10(34.54333);
@@ -123,14 +124,14 @@ public class MeasurementControllerTests {
 		insight = new Insight();
 		insight.setTime(endDateTime);
 		insight.setFrequency(Frequency.DAILY);
-		insight.setEmpty(false);
+		insight.setAvailable(false);
 		insight.setForecast(true);
 		insight.setPm2_5(45.2323);
 		insight.setPm10(52.3444);
 		insight.setSiteId(siteId);
 		insights.add(insight);
 
-		when(insightsService.getInsights(startDateTime, endDateTime, siteId, 0)).thenReturn(insights);
+		when(insightsService.getInsights(startDateTime, endDateTime, siteId)).thenReturn(new InsightData(insights, insights));
 
 		this.mockMvc.perform(get("/api/v1/view/measurements/app/insights")
 				.contextPath("/api/v1/view")

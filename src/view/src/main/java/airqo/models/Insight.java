@@ -24,7 +24,7 @@ public class Insight implements Serializable {
 	private Date time;
 	private double pm2_5;
 	private double pm10;
-	private Boolean empty;
+	private Boolean available;
 	private Boolean forecast;
 	private Frequency frequency;
 	private String siteId;

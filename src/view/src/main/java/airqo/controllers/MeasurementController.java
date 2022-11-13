@@ -2,6 +2,7 @@ package airqo.controllers;
 
 import airqo.models.ApiResponseBody;
 import airqo.models.Insight;
+import airqo.models.InsightData;
 import airqo.services.InsightsService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -41,9 +42,11 @@ public class MeasurementController {
 			utcOffset = 0;
 		}
 
-		List<Insight> insights = insightsService.getInsights(startDateTime, endDateTime, siteId, utcOffset);
+		InsightData insights = insightsService.getInsights(startDateTime, endDateTime, siteId);
+		List<Insight> forecast = insightsService.formatInsightsTime(insights.getForecast(), utcOffset);
+		List<Insight>  historical = insightsService.formatInsightsTime(insights.getHistorical(), utcOffset);
 
-		ApiResponseBody apiResponseBody = new ApiResponseBody("Operation Successful", insights);
+		ApiResponseBody apiResponseBody = new ApiResponseBody("Operation Successful", new InsightData(forecast, historical));
 		return new ResponseEntity<>(apiResponseBody, new HttpHeaders(), HttpStatus.OK);
 	}
 

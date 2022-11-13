@@ -1,10 +1,12 @@
 package airqo.services;
 
 import airqo.models.Insight;
+import airqo.models.InsightData;
 
 import java.util.Date;
 import java.util.List;
 
 public interface InsightsService {
-	List<Insight> getInsights(Date startDateTime, Date endDateTime, String siteId, int utcOffSet);
+	InsightData getInsights(Date startDateTime, Date endDateTime, String siteId);
+	public List<Insight> formatInsightsTime(List<Insight> insights, int utcOffSet);
 }
