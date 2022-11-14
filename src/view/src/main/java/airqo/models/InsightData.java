@@ -17,7 +17,7 @@ public class InsightData {
 	private List<Insight> historical;
 
 	@JsonIgnore
-	public boolean isEmpty(){
+	public boolean isEmpty() {
 		return forecast.isEmpty() && historical.isEmpty();
 	}
 }

@@ -38,13 +38,13 @@ public class MeasurementController {
 													   @RequestParam(required = false) Integer utcOffset,
 													   @RequestParam() String siteId) {
 
-		if(utcOffset == null){
+		if (utcOffset == null) {
 			utcOffset = 0;
 		}
 
 		InsightData insights = insightsService.getInsights(startDateTime, endDateTime, siteId);
-		List<Insight> forecast = insightsService.formatInsightsTime(insights.getForecast(), utcOffset);
-		List<Insight>  historical = insightsService.formatInsightsTime(insights.getHistorical(), utcOffset);
+		List<Insight> forecast = insightsService.formatInsightsData(insights.getForecast(), utcOffset);
+		List<Insight> historical = insightsService.formatInsightsData(insights.getHistorical(), utcOffset);
 
 		ApiResponseBody apiResponseBody = new ApiResponseBody("Operation Successful", new InsightData(forecast, historical));
 		return new ResponseEntity<>(apiResponseBody, new HttpHeaders(), HttpStatus.OK);

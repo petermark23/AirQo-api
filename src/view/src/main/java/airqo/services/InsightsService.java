@@ -8,5 +8,6 @@ import java.util.List;
 
 public interface InsightsService {
 	InsightData getInsights(Date startDateTime, Date endDateTime, String siteId);
-	public List<Insight> formatInsightsTime(List<Insight> insights, int utcOffSet);
+
+	List<Insight> formatInsightsData(List<Insight> insights, int utcOffSet);
 }

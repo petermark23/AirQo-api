@@ -1,6 +1,7 @@
 package airqo.config;
 
 import airqo.models.ApiResponseBody;
+import com.google.cloud.bigquery.BigQueryException;
 import io.micrometer.core.instrument.config.validate.ValidationException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Profile;
@@ -112,5 +113,22 @@ public class GlobalExceptionHandler {
 			.status(HttpStatus.INTERNAL_SERVER_ERROR)
 			.body(new ApiResponseBody("Internal Server Error", null));
 	}
+
+	@ExceptionHandler(RuntimeException.class)
+	public ResponseEntity<ApiResponseBody> handleRuntimeError(HttpServletRequest request, RuntimeException exception) {
+		log.debug("InternalServerError {}", request.getRequestURI(), exception);
+		return ResponseEntity
+			.status(HttpStatus.INTERNAL_SERVER_ERROR)
+			.body(new ApiResponseBody("Internal Server Error", null));
+	}
+
+	@ExceptionHandler(BigQueryException.class)
+	public ResponseEntity<ApiResponseBody> handleBigQueryError(HttpServletRequest request, BigQueryException exception) {
+		log.debug("InternalServerError {}", request.getRequestURI(), exception);
+		return ResponseEntity
+			.status(HttpStatus.INTERNAL_SERVER_ERROR)
+			.body(new ApiResponseBody("Internal Server Error", null));
+	}
+
 
 }

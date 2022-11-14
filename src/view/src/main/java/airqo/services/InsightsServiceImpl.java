@@ -91,7 +91,7 @@ public class InsightsServiceImpl implements InsightsService {
 	}
 
 	@Override
-	public List<Insight> formatInsightsTime(List<Insight> insights, int utcOffSet) {
+	public List<Insight> formatInsightsData(List<Insight> insights, int utcOffSet) {
 
 		final SimpleDateFormat hourlyDateFormat = new SimpleDateFormat(Frequency.HOURLY.dateTimeFormat());
 		final SimpleDateFormat dailyDateFormat = new SimpleDateFormat(Frequency.DAILY.dateTimeFormat());
@@ -107,8 +107,10 @@ public class InsightsServiceImpl implements InsightsService {
 				}
 
 				insight.setTime(dateTime.toDate());
+				insight.setPm10(Double.parseDouble(new DecimalFormat("#.##").format(insight.getPm10())));
+				insight.setPm2_5(Double.parseDouble(new DecimalFormat("#.##").format(insight.getPm2_5())));
 
-				switch (insight.getFrequency()){
+				switch (insight.getFrequency()) {
 					case DAILY:
 						insight.setTime(dailyDateFormat.parse(dailyDateFormat.format(insight.getTime())));
 						break;
@@ -121,22 +123,32 @@ public class InsightsServiceImpl implements InsightsService {
 
 			} catch (Exception ignored) {
 			}
-		}).collect(Collectors.toList());
+		}).sorted(Comparator.comparing(Insight::getTime)).collect(Collectors.toList());
 	}
 
-	@Override
-	@SentrySpan
-	@Cacheable(value = "appInsightsCache", cacheNames = {"appInsightsCache"}, unless = "#result.isEmpty()")
-	public InsightData getInsights(Date startDateTime, Date endDateTime, String siteId) {
+	private List<Insight> createForecastInsights(List<Insight> forecastInsights, String siteId) {
 
-		List<Insight> insights = this.bigQueryApi.getInsights(startDateTime, endDateTime, siteId);
-
-		List<Insight> forecastInsights = insights.stream().filter(Insight::getForecast)
-			.collect(Collectors.toList());
 		forecastInsights = new ArrayList<>(new HashSet<>(forecastInsights));
 
-		List<Insight> historicalInsights = insights.stream().filter(insight -> !insight.getForecast())
-			.collect(Collectors.toList());
+		// Forecast insights
+		forecastInsights.removeIf(insight -> insight.getTime().before(new Date()));
+
+		final SimpleDateFormat dailyDateFormat = new SimpleDateFormat(Frequency.DAILY.dateTimeFormat());
+
+		try {
+			Date startDate = dailyDateFormat.parse(dailyDateFormat.format(new Date()));
+			Date endDate = new DateTime(startDate).plusDays(2).toDate();
+
+			fillMissingInsights(forecastInsights, startDate, endDate, siteId, Frequency.HOURLY);
+		} catch (ParseException e) {
+			throw new RuntimeException(e);
+		}
+
+		return forecastInsights;
+	}
+
+	private List<Insight> createHistoricalInsights(List<Insight> historicalInsights, Date startDateTime, Date endDateTime, String siteId) {
+
 		historicalInsights = new ArrayList<>(new HashSet<>(historicalInsights));
 
 		// Daily insights
@@ -151,24 +163,29 @@ public class InsightsServiceImpl implements InsightsService {
 			.collect(Collectors.toList());
 		fillMissingInsights(historicalHourlyInsights, startDateTime, endDateTime, siteId, Frequency.HOURLY);
 
-		// Forecast insights
-		forecastInsights.removeIf(insight -> insight.getTime().before(new Date()));
-		fillMissingInsights(forecastInsights, startDateTime, endDateTime, siteId, Frequency.HOURLY);
-
-		forecastInsights = forecastInsights.stream().peek(insight -> {
-			insight.setPm10(Double.parseDouble(new DecimalFormat("#.##").format(insight.getPm10())));
-			insight.setPm2_5(Double.parseDouble(new DecimalFormat("#.##").format(insight.getPm2_5())));
-		}).sorted(Comparator.comparing(Insight::getTime)).collect(Collectors.toList());
-
 		// Insights
 		historicalHourlyInsights.addAll(historicalDailyInsights);
 
-		historicalHourlyInsights = historicalHourlyInsights.stream().peek(insight -> {
-			insight.setPm10(Double.parseDouble(new DecimalFormat("#.##").format(insight.getPm10())));
-			insight.setPm2_5(Double.parseDouble(new DecimalFormat("#.##").format(insight.getPm2_5())));
-		}).sorted(Comparator.comparing(Insight::getTime)).collect(Collectors.toList());
+		return historicalHourlyInsights;
+	}
 
+	@Override
+	@SentrySpan
+	@Cacheable(value = "appInsightsCache", cacheNames = {"appInsightsCache"}, unless = "#result.isEmpty()")
+	public InsightData getInsights(Date startDateTime, Date endDateTime, String siteId) {
 
-		return new InsightData(forecastInsights ,historicalHourlyInsights);
+		List<Insight> insights = this.bigQueryApi.getInsights(startDateTime, endDateTime, siteId);
+
+		// Forecast insights
+		List<Insight> forecastInsights = insights.stream().filter(Insight::getForecast)
+			.collect(Collectors.toList());
+		forecastInsights = createForecastInsights(forecastInsights, siteId);
+
+		// Historical insights
+		List<Insight> historicalInsights = insights.stream().filter(insight -> !insight.getForecast())
+			.collect(Collectors.toList());
+		historicalInsights = createHistoricalInsights(historicalInsights, startDateTime, endDateTime, siteId);
+
+		return new InsightData(forecastInsights, historicalInsights);
 	}
 }
