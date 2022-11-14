@@ -1,6 +1,7 @@
 package airqo.models;
 
 import com.fasterxml.jackson.annotation.JsonFormat;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -25,6 +26,8 @@ public class Insight implements Serializable {
 	private double pm2_5;
 	private double pm10;
 	private Boolean available;
+
+	@JsonIgnore
 	private Boolean forecast;
 	private Frequency frequency;
 	private String siteId;

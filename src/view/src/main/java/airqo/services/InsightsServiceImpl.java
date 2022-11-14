@@ -3,7 +3,6 @@ package airqo.services;
 import airqo.models.Frequency;
 import airqo.models.Insight;
 import airqo.models.InsightData;
-import io.sentry.spring.tracing.SentrySpan;
 import lombok.extern.slf4j.Slf4j;
 import org.joda.time.DateTime;
 import org.springframework.cache.annotation.Cacheable;
@@ -58,7 +57,7 @@ public class InsightsServiceImpl implements InsightsService {
 	}
 
 	private void fillMissingInsights(List<Insight> insights, Date startDateTime,
-									 Date endDateTime, String siteId, Frequency frequency) {
+									 Date endDateTime, String siteId, Frequency frequency, Boolean isForecast) {
 
 		Random random = new Random();
 		List<Date> insightsDateArray = insights.stream().map(Insight::getTime).collect(Collectors.toList());
@@ -71,8 +70,8 @@ public class InsightsServiceImpl implements InsightsService {
 				Insight insight = new Insight();
 				insight.setTime(date);
 				insight.setFrequency(frequency);
-				insight.setForecast(false);
-				insight.setAvailable(true);
+				insight.setForecast(isForecast);
+				insight.setAvailable(false);
 				insight.setSiteId(siteId);
 
 				if (insights.size() <= 1) {
@@ -90,8 +89,7 @@ public class InsightsServiceImpl implements InsightsService {
 
 	}
 
-	@Override
-	public List<Insight> formatInsightsData(List<Insight> insights, int utcOffSet) {
+	private List<Insight> formatInsightsData(List<Insight> insights, int utcOffSet) {
 
 		final SimpleDateFormat hourlyDateFormat = new SimpleDateFormat(Frequency.HOURLY.dateTimeFormat());
 		final SimpleDateFormat dailyDateFormat = new SimpleDateFormat(Frequency.DAILY.dateTimeFormat());
@@ -126,28 +124,31 @@ public class InsightsServiceImpl implements InsightsService {
 		}).sorted(Comparator.comparing(Insight::getTime)).collect(Collectors.toList());
 	}
 
-	private List<Insight> createForecastInsights(List<Insight> forecastInsights, String siteId) {
+	private List<Insight> createForecastInsights(List<Insight> forecastInsights, String siteId, int utcOffSet) {
 
 		forecastInsights = new ArrayList<>(new HashSet<>(forecastInsights));
 
-		// Forecast insights
-		forecastInsights.removeIf(insight -> insight.getTime().before(new Date()));
-
-		final SimpleDateFormat dailyDateFormat = new SimpleDateFormat(Frequency.DAILY.dateTimeFormat());
-
 		try {
-			Date startDate = dailyDateFormat.parse(dailyDateFormat.format(new Date()));
-			Date endDate = new DateTime(startDate).plusDays(2).toDate();
 
-			fillMissingInsights(forecastInsights, startDate, endDate, siteId, Frequency.HOURLY);
+			final SimpleDateFormat dailyDateFormat = new SimpleDateFormat(Frequency.DAILY.dateTimeFormat());
+
+			Date today = dailyDateFormat.parse(dailyDateFormat.format(new Date()));
+
+			final DateTime startDateTime = utcOffSet < 0 ? new DateTime(today).plusHours(utcOffSet) : new DateTime(today).minusHours(utcOffSet);
+			final DateTime endDateTime = new DateTime(startDateTime).plusDays(2);
+
+			forecastInsights = forecastInsights.stream().filter(insight -> (insight.getTime().after(startDateTime.toDate()) && insight.getTime().before(endDateTime.toDate())) || insight.getTime().equals(startDateTime.toDate()) || insight.getTime().equals(endDateTime.toDate())).collect(Collectors.toList());
+
+			fillMissingInsights(forecastInsights, startDateTime.toDate(), endDateTime.toDate(), siteId, Frequency.HOURLY, true);
+
 		} catch (ParseException e) {
 			throw new RuntimeException(e);
 		}
 
-		return forecastInsights;
+		return formatInsightsData(forecastInsights, utcOffSet);
 	}
 
-	private List<Insight> createHistoricalInsights(List<Insight> historicalInsights, Date startDateTime, Date endDateTime, String siteId) {
+	private List<Insight> createHistoricalInsights(List<Insight> historicalInsights, Date startDateTime, Date endDateTime, String siteId, int utcOffSet) {
 
 		historicalInsights = new ArrayList<>(new HashSet<>(historicalInsights));
 
@@ -155,36 +156,46 @@ public class InsightsServiceImpl implements InsightsService {
 		List<Insight> historicalDailyInsights = historicalInsights.stream().filter(insight ->
 				insight.getFrequency() == Frequency.DAILY)
 			.collect(Collectors.toList());
-		fillMissingInsights(historicalDailyInsights, startDateTime, endDateTime, siteId, Frequency.DAILY);
+		fillMissingInsights(historicalDailyInsights, startDateTime, endDateTime, siteId, Frequency.DAILY, false);
 
 		// Hourly insights
 		List<Insight> historicalHourlyInsights = historicalInsights.stream().filter(insight ->
 				insight.getFrequency() == Frequency.HOURLY)
 			.collect(Collectors.toList());
-		fillMissingInsights(historicalHourlyInsights, startDateTime, endDateTime, siteId, Frequency.HOURLY);
+		fillMissingInsights(historicalHourlyInsights, startDateTime, endDateTime, siteId, Frequency.HOURLY, false);
 
 		// Insights
 		historicalHourlyInsights.addAll(historicalDailyInsights);
 
-		return historicalHourlyInsights;
+		return formatInsightsData(historicalHourlyInsights, utcOffSet);
 	}
 
 	@Override
-	@SentrySpan
 	@Cacheable(value = "appInsightsCache", cacheNames = {"appInsightsCache"}, unless = "#result.isEmpty()")
-	public InsightData getInsights(Date startDateTime, Date endDateTime, String siteId) {
+	public InsightData getInsights(Date startDateTime, Date endDateTime, String siteId, int utcOffSet) {
 
-		List<Insight> insights = this.bigQueryApi.getInsights(startDateTime, endDateTime, siteId);
+		DateTime start = new DateTime(startDateTime);
+		DateTime end = new DateTime(endDateTime);
+
+		if (utcOffSet < 0) {
+			start = start.plusHours(utcOffSet);
+			end = end.plusHours(utcOffSet);
+		} else {
+			start = start.minusHours(utcOffSet);
+			end = end.minusHours(utcOffSet);
+		}
+
+		List<Insight> insights = this.bigQueryApi.getInsights(start.toDate(), end.toDate(), siteId);
+
+		// Historical
+		List<Insight> historicalInsights = insights.stream().filter(insight -> !insight.getForecast())
+			.collect(Collectors.toList());
+		historicalInsights = createHistoricalInsights(historicalInsights, start.toDate(), end.toDate(), siteId, utcOffSet);
 
 		// Forecast insights
 		List<Insight> forecastInsights = insights.stream().filter(Insight::getForecast)
 			.collect(Collectors.toList());
-		forecastInsights = createForecastInsights(forecastInsights, siteId);
-
-		// Historical insights
-		List<Insight> historicalInsights = insights.stream().filter(insight -> !insight.getForecast())
-			.collect(Collectors.toList());
-		historicalInsights = createHistoricalInsights(historicalInsights, startDateTime, endDateTime, siteId);
+		forecastInsights = createForecastInsights(forecastInsights, siteId, utcOffSet);
 
 		return new InsightData(forecastInsights, historicalInsights);
 	}

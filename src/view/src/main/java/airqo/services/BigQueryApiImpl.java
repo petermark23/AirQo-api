@@ -102,7 +102,7 @@ public class BigQueryApiImpl implements BigQueryApi {
 					insight.setSiteId(row.get("site_id").getStringValue());
 					insight.setForecast(row.get("forecast").getBooleanValue());
 					insight.setTime(new Date(Double.valueOf(row.get("timestamp").getLongValue()).intValue()));
-					insight.setAvailable(false);
+					insight.setAvailable(true);
 
 					insights.add(insight);
 				} catch (NumberFormatException e) {

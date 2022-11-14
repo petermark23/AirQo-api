@@ -912,132 +912,204 @@ def download_weather_data():
             )
             print(f"{start}-{end} completed\n")
 
+import pandas as pd
+def get_date_ranges(start_date_time, end_date_time, frequency):
+
+    # Examples
+    # frequency = '720H'
+    # start_date_time = '2022-01-01'
+    # end_date_time = '2023-01-01'
+
+    def date_to_str(date: datetime, str_format="%Y-%m-%dT%H:%M:%SZ"):
+        """
+        Converts datetime to a string
+        """
+        return datetime.strftime(date, str_format)
+
+    dates = pd.date_range(start_date_time, end_date_time, freq=frequency)
+    freq = dates.freq
+
+    if dates.values.size == 1:
+        dates = dates.append(pd.Index([pd.to_datetime(end_date_time)]))
+
+    dates = [pd.to_datetime(str(date)) for date in dates.values]
+    return_dates = []
+
+    array_last_date_time = dates.pop()
+    for date in dates:
+        end = date + timedelta(hours=freq.n)
+        if end > array_last_date_time:
+            end = array_last_date_time
+        return_dates.append((date_to_str(date), date_to_str(end)))
+
+    print(return_dates)
+
+    return return_dates
+
 
 if __name__ == "__main__":
 
-    from airqo_etl_utils.date import date_to_str_hours
+    # def query_dates_array(
+    #     data_source: DataSource, start_date_time, end_date_time, freq: str = None
+    # ):
 
-    hour_of_day = datetime.utcnow() - timedelta(days=14)
-    default_args_start = date_to_str_hours(hour_of_day)
-    default_args_end = datetime.strftime(hour_of_day, "%Y-%m-%dT%H:59:59Z")
+    def date_to_str(date: datetime, str_format="%Y-%m-%dT%H:%M:%SZ"):
+        """
+        Converts datetime to a string
+        """
+        return datetime.strftime(date, str_format)
 
-    parser = argparse.ArgumentParser(description="Test functions configuration")
-    parser.add_argument(
-        "--start",
-        default=default_args_start,
-        required=False,
-        type=valid_datetime_format,
-        help='start datetime in format "yyyy-MM-ddThh:mm:ssZ"',
-    )
-    parser.add_argument(
-        "--end",
-        required=False,
-        default=default_args_end,
-        type=valid_datetime_format,
-        help='end datetime in format "yyyy-MM-ddThh:mm:ssZ"',
-    )
-    parser.add_argument(
-        "--file",
-        required=True,
-        type=str.lower,
-    )
-    parser.add_argument(
-        "--tenant",
-        required=False,
-        type=str.lower,
-        default="airqo",
-    )
-    parser.add_argument(
-        "--action",
-        required=True,
-        type=str.lower,
-        help="range interval in minutes",
-        choices=[
-            "airqo_realtime_data",
-            "airqo_historical_raw_data",
-            "airqo_historical_hourly_data",
-            "weather_data",
-            "data_warehouse",
-            "kcca_hourly_data",
-            "daily_insights_data",
-            "forecast_insights_data",
-            "meta_data",
-            "app_notifications",
-            "calibrate_historical_airqo_data",
-            "airnow_bam_data",
-            "urban_better_data_plume_labs",
-            "urban_better_data_air_beam",
-            "airqo_mobile_device_measurements",
-            "airqo_bam_data",
-            "nasa_purple_air_data",
-            "airqo_historical_bam_data",
-            "airqo_historical_api_bam_data",
-        ],
-    )
+    frequency = '720H'
+    start_date_time = '2022-01-01'
+    end_date_time = '2023-01-01'
 
-    args = parser.parse_args()
+    dates = pd.date_range('2022-01-01', '2023-01-01', freq=frequency)
+    freq = dates.freq
 
-    main_class = MainClass(start_date_time=args.start, end_date_time=args.end)
+    if dates.values.size == 1:
+        dates = dates.append(pd.Index([pd.to_datetime(end_date_time)]))
 
-    if args.action == "airqo_realtime_data":
-        main_class.airqo_realtime_data()
+    dates = [pd.to_datetime(str(date)) for date in dates.values]
+    return_dates = []
 
-    if args.action == "airqo_historical_raw_data":
-        airqo_historical_raw_data()
+    array_last_date_time = dates.pop()
+    for date in dates:
+        end = date + timedelta(hours=freq.n)
+        if end > array_last_date_time:
+            end = array_last_date_time
+        return_dates.append((date_to_str(date), date_to_str(end)))
 
-    if args.action == "airqo_historical_hourly_data":
-        airqo_historical_hourly_data()
 
-    elif args.action == "weather_data":
-        weather_data(start_date_time=args.start, end_date_time=args.end, file=args.file)
+    print(return_dates)
 
-    elif args.action == "data_warehouse":
-        main_class.data_warehouse()
+    return return_dates
 
-    elif args.action == "kcca_hourly_data":
-        main_class.kcca_realtime_data()
 
-    elif args.action == "daily_insights_data":
-        daily_insights(start_date_time=args.start, end_date_time=args.end)
+    # return return_dates
 
-    elif args.action == "forecast_insights_data":
-        insights_forecast()
-
-    elif args.action == "app_notifications":
-        app_notifications()
-
-    elif args.action == "meta_data":
-        main_class.meta_data()
-
-    elif args.action == "calibrate_historical_airqo_data":
-        main_class.calibrate_historical_airqo_data()
-
-    elif args.action == "airnow_bam_data":
-        main_class.airnow_bam_data()
-
-    elif args.action == "airqo_historical_csv_bam_data":
-        airqo_historical_csv_bam_data()
-
-    elif args.action == "airqo_historical_api_bam_data":
-        airqo_historical_api_bam_data()
-
-    elif args.action == "airqo_bam_data":
-        main_class.airqo_bam_data()
-
-    elif args.action == "nasa_purple_air_data":
-        nasa_purple_air_data()
-
-    elif args.action == "urban_better_data_plume_labs":
-        urban_better_data_from_plume_labs()
-
-    elif args.action == "urban_better_data_biq_query":
-        urban_better_data_from_bigquery()
-
-    elif args.action == "urban_better_data_air_beam":
-        main_class.urban_better_data_from_air_beam_csv(no_of_files=3)
-
-    elif args.action == "airqo_mobile_device_measurements":
-        airqo_mobile_device_measurements()
-
-    else:
-        pass
+    # from airqo_etl_utils.date import date_to_str_hours
+    #
+    # hour_of_day = datetime.utcnow() - timedelta(days=14)
+    # default_args_start = date_to_str_hours(hour_of_day)
+    # default_args_end = datetime.strftime(hour_of_day, "%Y-%m-%dT%H:59:59Z")
+    #
+    # parser = argparse.ArgumentParser(description="Test functions configuration")
+    # parser.add_argument(
+    #     "--start",
+    #     default=default_args_start,
+    #     required=False,
+    #     type=valid_datetime_format,
+    #     help='start datetime in format "yyyy-MM-ddThh:mm:ssZ"',
+    # )
+    # parser.add_argument(
+    #     "--end",
+    #     required=False,
+    #     default=default_args_end,
+    #     type=valid_datetime_format,
+    #     help='end datetime in format "yyyy-MM-ddThh:mm:ssZ"',
+    # )
+    # parser.add_argument(
+    #     "--file",
+    #     required=True,
+    #     type=str.lower,
+    # )
+    # parser.add_argument(
+    #     "--tenant",
+    #     required=False,
+    #     type=str.lower,
+    #     default="airqo",
+    # )
+    # parser.add_argument(
+    #     "--action",
+    #     required=True,
+    #     type=str.lower,
+    #     help="range interval in minutes",
+    #     choices=[
+    #         "airqo_realtime_data",
+    #         "airqo_historical_raw_data",
+    #         "airqo_historical_hourly_data",
+    #         "weather_data",
+    #         "data_warehouse",
+    #         "kcca_hourly_data",
+    #         "daily_insights_data",
+    #         "forecast_insights_data",
+    #         "meta_data",
+    #         "app_notifications",
+    #         "calibrate_historical_airqo_data",
+    #         "airnow_bam_data",
+    #         "urban_better_data_plume_labs",
+    #         "urban_better_data_air_beam",
+    #         "airqo_mobile_device_measurements",
+    #         "airqo_bam_data",
+    #         "nasa_purple_air_data",
+    #         "airqo_historical_bam_data",
+    #         "airqo_historical_api_bam_data",
+    #     ],
+    # )
+    #
+    # args = parser.parse_args()
+    #
+    # main_class = MainClass(start_date_time=args.start, end_date_time=args.end)
+    #
+    # if args.action == "airqo_realtime_data":
+    #     main_class.airqo_realtime_data()
+    #
+    # if args.action == "airqo_historical_raw_data":
+    #     airqo_historical_raw_data()
+    #
+    # if args.action == "airqo_historical_hourly_data":
+    #     airqo_historical_hourly_data()
+    #
+    # elif args.action == "weather_data":
+    #     weather_data(start_date_time=args.start, end_date_time=args.end, file=args.file)
+    #
+    # elif args.action == "data_warehouse":
+    #     main_class.data_warehouse()
+    #
+    # elif args.action == "kcca_hourly_data":
+    #     main_class.kcca_realtime_data()
+    #
+    # elif args.action == "daily_insights_data":
+    #     daily_insights(start_date_time=args.start, end_date_time=args.end)
+    #
+    # elif args.action == "forecast_insights_data":
+    #     insights_forecast()
+    #
+    # elif args.action == "app_notifications":
+    #     app_notifications()
+    #
+    # elif args.action == "meta_data":
+    #     main_class.meta_data()
+    #
+    # elif args.action == "calibrate_historical_airqo_data":
+    #     main_class.calibrate_historical_airqo_data()
+    #
+    # elif args.action == "airnow_bam_data":
+    #     main_class.airnow_bam_data()
+    #
+    # elif args.action == "airqo_historical_csv_bam_data":
+    #     airqo_historical_csv_bam_data()
+    #
+    # elif args.action == "airqo_historical_api_bam_data":
+    #     airqo_historical_api_bam_data()
+    #
+    # elif args.action == "airqo_bam_data":
+    #     main_class.airqo_bam_data()
+    #
+    # elif args.action == "nasa_purple_air_data":
+    #     nasa_purple_air_data()
+    #
+    # elif args.action == "urban_better_data_plume_labs":
+    #     urban_better_data_from_plume_labs()
+    #
+    # elif args.action == "urban_better_data_biq_query":
+    #     urban_better_data_from_bigquery()
+    #
+    # elif args.action == "urban_better_data_air_beam":
+    #     main_class.urban_better_data_from_air_beam_csv(no_of_files=3)
+    #
+    # elif args.action == "airqo_mobile_device_measurements":
+    #     airqo_mobile_device_measurements()
+    #
+    # else:
+    #     pass

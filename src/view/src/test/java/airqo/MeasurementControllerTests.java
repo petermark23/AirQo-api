@@ -80,7 +80,7 @@ public class MeasurementControllerTests {
 		insights.clear();
 		insights.add(insight);
 
-		when(insightsService.getInsights(startDateTime, endDateTime, siteId)).thenReturn(new InsightData(insights, insights));
+		when(insightsService.getForecastInsights(startDateTime, endDateTime, siteId)).thenReturn(new InsightData(insights, insights));
 
 		ResultActions resultActions = this.mockMvc.perform(get("/measurements/app/insights")
 				.param("siteId", siteId)
@@ -95,7 +95,7 @@ public class MeasurementControllerTests {
 			.andExpect(jsonPath("$.data", hasSize(1)))
 			.andExpect(jsonPath("$.data[0].siteId", is("site-01")));
 
-		verify(this.insightsService, times(1)).getInsights(startDateTime, endDateTime, siteId);
+		verify(this.insightsService, times(1)).getForecastInsights(startDateTime, endDateTime, siteId);
 
 		MockHttpServletResponse response = resultActions.andReturn().getResponse();
 		Assertions.assertEquals(response.getStatus(), 200);
@@ -131,7 +131,7 @@ public class MeasurementControllerTests {
 		insight.setSiteId(siteId);
 		insights.add(insight);
 
-		when(insightsService.getInsights(startDateTime, endDateTime, siteId)).thenReturn(new InsightData(insights, insights));
+		when(insightsService.getForecastInsights(startDateTime, endDateTime, siteId)).thenReturn(new InsightData(insights, insights));
 
 		this.mockMvc.perform(get("/api/v1/view/measurements/app/insights")
 				.contextPath("/api/v1/view")
